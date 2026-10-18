@@ -1,0 +1,48 @@
+android-armv7:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            v="${{ inputs.version }}"
+          else
+            v="${github.ref_name#v}"
+          fi
+          echo "version=$v" >> $GITHUB_OUTPUT
+          echo "building version $v"
+
+      # 1. 获取官方 Aether 核心的 Android ARMv7 版本
+      - name: Fetch official Aether core (Android ARMv7)
+        run: |
+          mkdir -p core-bin
+          curl -L -o core.tar.gz https://github.com/CluvexStudio/Aether/releases/download/v2.1.0/aether-android-armv7.tar.gz
+          tar -xzf core.tar.gz -C core-bin/
+          # 确保解压出来的核心二进制可执行（通常解压出来文件名叫 aether）
+          chmod +x core-bin/aether
+
+      # 2. 交叉编译 Go 程序为 Android ARMv7
+      - name: Build Go binary for Android ARMv7
+        env:
+          GOOS: android
+          GOARCH: arm
+          GOARM: 7
+          CGO_ENABLED: 0 # 如果你的 Go 代码不依赖 CGO
+        run: |
+          go build -ldflags="-s -w" -o build/app-android-armv7 .
+
+      # 3. 打包或发布 (根据你的需求调整)
+      - name: Package
+        run: |
+          tar -czvf app-android-armv7.tar.gz -C build . -C ../core-bin aether

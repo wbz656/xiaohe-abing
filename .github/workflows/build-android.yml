@@ -19,51 +19,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache: true
-
-      - name: Resolve version
-        id: ver
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            v="${{ inputs.version }}"
-          else
-            v="${github.ref_name#v}"
-          fi
-          echo "version=$v" >> $GITHUB_OUTPUT
-          echo "building version $v"
-
-      # 1. 获取官方 Aether 核心 (Android ARMv7)
+      # 1. 创建打包目录并下载官方 Android ARMv7 核心
       - name: Fetch official Aether core (Android ARMv7)
         run: |
-          mkdir -p core-bin
-          curl -L -o core.tar.gz https://github.com/CluvexStudio/Aether/releases/download/v2.1.0/aether-android-armv7.tar.gz
-          tar -xzf core.tar.gz -C core-bin/
-          chmod +x core-bin/* || true
-
-      # 2. 交叉编译 Go 程序为 Android ARMv7
-      - name: Build Go binary for Android ARMv7
-        env:
-          GOOS: android
-          GOARCH: arm
-          GOARM: 7
-          CGO_ENABLED: 0
-        run: |
           mkdir -p dist
-          go build -ldflags="-s -w" -o dist/app-android-armv7 .
+          curl -L -o core.tar.gz https://github.com/CluvexStudio/Aether/releases/download/v2.1.0/aether-android-armv7.tar.gz
+          tar -xzf core.tar.gz -C dist/
+          chmod +x dist/* || true
 
-      # 3. 将核心与编译好的程序打包为 tar.gz 压缩包
+      # 2. 把你仓库里自带的其他文件（如有）复制进打包目录
+      - name: Copy repository files
+        run: |
+          find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name '.github' ! -name 'dist' -exec cp -r {} dist/ \; || true
+
+      # 3. 打包成 tar.gz 文件
       - name: Package Android build
         run: |
-          tar -czvf android-armv7-v${{ steps.ver.outputs.version }}.tar.gz -C dist . -C ../core-bin .
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="1.1.3"; fi
+          tar -czvf android-armv7-v$VERSION.tar.gz -C dist .
 
-      # 4. 将生成的安卓构建文件保存为 Artifact (供在 GitHubActions 页面直接下载)
+      # 4. 上传到 GitHub Actions 产物中
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-armv7-v${{ steps.ver.outputs.version }}
-          path: android-armv7-v${{ steps.ver.outputs.version }}.tar.gz
+          name: android-armv7-v${{ github.event.inputs.version || '1.1.3' }}
+          path: android-armv7-v*.tar.gz
